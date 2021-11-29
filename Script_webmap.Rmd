@@ -1,0 +1,142 @@
+---
+title: "Mapa de dispersion de especies botanicas-UNAMAD"
+author: "Beatriz Ponce de Leon"
+date: ""
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    social: menu
+    vertical_layout: fill
+    
+    #theme: journal
+---
+
+```{r setup, include=FALSE}
+library(openxlsx)
+library(crosstalk) 
+library(DT)            # Para generaar la tabla
+library(sf)
+library(leaflet)
+library(leaflet.extras)
+library(leaflet.providers)
+library(htmlwidgets)
+library(leafem)
+
+PDFM         <- st_read("SHP/Castaña.shp")                                  #Concesiones de Castaña 
+Con_PDFM     <- st_transform(PDFM  ,crs = st_crs("+proj=longlat +datum=WGS84 +no_defs")) # Poner en uns proyeccion
+
+CCNN         =  st_read("SHP/CCNN.shp")     
+CCN          <- st_transform(CCNN  ,crs = st_crs("+proj=longlat +datum=WGS84 +no_defs"))
+
+Conser       =  st_read("SHP/Concervacion.shp")     
+Conserv      <- st_transform(Conser ,crs = st_crs("+proj=longlat +datum=WGS84 +no_defs"))
+
+Conser       =  st_read("SHP/Concervacion.shp")     
+Conserv      <- st_transform(Conser ,crs = st_crs("+proj=longlat +datum=WGS84 +no_defs"))
+
+Inventario   =  st_read("SHP/Inventario.shp")     
+Inventar     <- st_transform(Inventario ,crs = st_crs("+proj=longlat +datum=WGS84 +no_defs"))
+Inventarxy   <- cbind(Inventar, st_coordinates(st_centroid(Inventar$geometry))) 
+
+Distritos     =  st_read("SHP/Distritos.shp")     
+Distrito      <- st_transform(Distritos ,crs = st_crs("+proj=longlat +datum=WGS84 +no_defs"))
+
+Vial         =  st_read("SHP/Vial.shp")     
+Via          <- st_transform(Vial ,crs = st_crs("+proj=longlat +datum=WGS84 +no_defs"))
+
+
+Spp_Names <- Inventarxy$FAMILIA %>% unique()
+Colores <- c("#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", 
+             "#e31a1c", "#fdbf6f", "#ff7f00", "#cab2d6")
+pal <- colorFactor(Colores, domain = Spp_Names)
+
+
+#Definiendo el Logo
+m="https://images.vexels.com/media/users/3/143561/isolated/preview/afa3aa927b63061e3b0222b7dab9cdbf-ubicaci--n-n--utica-norte-flecha-vintage-by-vexels.png"
+
+polygon_popup <- paste0("<strong>Contrato: </strong>", Con_PDFM$contra, "<br>",          # Label
+                        "<strong>Titular: </strong>", Con_PDFM$nomtit,"<br>",
+                        "<strong>Otorgado: </strong>", Con_PDFM$nomrel,"<br>",
+                        "<strong>Sector: </strong>", Con_PDFM$sector,"<br>",
+                        "<strong>Perimetro: </strong>", Con_PDFM$perime,"<br>",
+                        "<strong>Area SIG: </strong>", Con_PDFM$supsig,"<br>")
+
+polygon_CCNN <- paste0("<strong>Etnolinguie: </strong>", CCN$ETNOLINGUI, "<br>",          # Label
+                        "<strong>Cominidad: </strong>", CCN$COMUNIDA_1,"<br>",
+                        "<strong>Resolucion: </strong>", CCN$RESOLUCION,"<br>",
+                        "<strong>Area SIG : </strong>", CCN$AREA_TITUL,"<br>")
+
+polygon_Conse<- paste0("<strong>Contrato: </strong>", Conserv$contra, "<br>",          # Label
+                       "<strong>Titular: </strong>", Conserv$nomtit,"<br>",
+                       "<strong>Otorgado: </strong>", Conserv$nomrel,"<br>",
+                       "<strong>Fecha: </strong>", Conserv$fecont,"<br>",
+                       "<strong>Perimetro: </strong>", Conserv$perime,"<br>",
+                       "<strong>Area SIG: </strong>", Conserv$supsig,"<br>")
+
+polygon_inven<- paste0("<strong>Familia: </strong>",Inventarxy$FAMILIA, "<br>",          # Label
+                       "<strong>Nombre Cientifico: </strong>", Inventarxy$NOMBRE_CIE,"<br>",
+                       "<strong>Nombe Comun: </strong>", Inventarxy$Nombre_Com,"<br>",
+                       "<strong>Diametro altura del Pecho: </strong>", Inventarxy$Dap,"<br>",
+                       "<strong>Altura Total: </strong>", Inventarxy$HT,"<br>",
+                       "<strong>Altura Comercial: </strong>", Inventarxy$HF,"<br>",
+                       "<strong>Numero de Colecta: </strong>", Inventarxy$N._DE_COL,"<br>",
+                       "<strong>Localidad: </strong>", Inventarxy$Locallidad,"<br>")
+quakes1 <- quakes[1:10,]
+leafIcons <- icons(
+  iconUrl = ifelse(quakes1$mag < 4.6,
+                   "http://leafletjs.com/examples/custom-icons/leaf-green.png",
+                   "http://leafletjs.com/examples/custom-icons/leaf-red.png" ),
+  iconWidth = 22, iconHeight = 60,
+  iconAnchorX = 2, iconAnchorY = 44)
+
+Map= leaflet() %>%
+  addControl(html = "<p><strong><em>Mapa de dispersion de Muestras Botanicas</em></strong></p>",
+             position = "topright")%>%
+  addLogo(m,url = "https://images.vexels.com/media/users/3/143561/isolated/preview/afa3aa927b63061e3b0222b7dab9cdbf-ubicaci--n-n--utica-norte-flecha-vintage-by-vexels.png",
+          position = "topleft",
+          offset.x = 50,
+          offset.y = 10,
+          width = 100,
+          height = 100)%>%
+  addPolygons(data= Con_PDFM ,popup = polygon_popup,color = "red", fillOpacity = 0.2,weight = 1,group = "Concesiones Forestales")%>%
+  addPolygons(data= CCN ,popup = polygon_CCNN,color = "#444444", fillOpacity = 0.2,weight = 1,group = "Comunidades Nativas")%>%
+  addPolygons(data= Conserv ,popup = polygon_Conse,color = "green", fillOpacity = 0.2,weight = 1,group = "Concesiones de Concervacion")%>%
+  addMarkers(data= Inventarxy, ~X, ~Y ,popup = polygon_inven,icon = leafIcons,group = "Inventario")%>%
+  addPolygons(data= Distrito ,color = "#53868B", fillOpacity = 0.001,weight = 2,group = "Distritos")%>%
+  addFeatures(Via,color = "#8B3A62",weight=3,group = "Red Vial")%>%
+  addLayersControl(baseGroups = c("CartoDB","Satellite", "OSM","OTM"),
+                 overlayGroups = c("Concesiones Forestales", "Comunidades Nativas","Concesiones de Concervacion","Inventario","Distritos","Red Vial", "Familia"),
+                 position = "topright",
+                 options = layersControlOptions(collapsed = T))%>%
+  addCircles(data = Inventarxy, lat = ~Y, 
+             lng = ~X, color = ~pal(Inventarxy$FAMILIA), 
+             fillOpacity = 0.5, label = ~Inventarxy$FAMILIA,group = "Familia")%>%
+  addProviderTiles(providers$OpenStreetMap, group = "OSM")%>%
+  addProviderTiles(providers$CartoDB.DarkMatter,group = "CartoDB")%>%
+  addProviderTiles(providers$Esri.WorldImagery, group = "Satellite")%>%
+  addProviderTiles(providers$OpenTopoMap, group = "OTM")%>%
+  addMiniMap(tiles = providers$Esri.WorldImagery,toggleDisplay = TRUE)%>%
+  addScaleBar(position = "bottomright",options = scaleBarOptions(maxWidth = 100,
+                                                                 metric = TRUE,
+                                                                 imperial = TRUE,
+                                                                 updateWhenIdle = TRUE)) %>%
+  addDrawToolbar(targetGroup = "Graficos",editOptions = editToolbarOptions(selectedPathOptions = selectedPathOptions()))%>%
+  addMeasure(position = "topleft",
+             primaryLengthUnit = "meters",
+             primaryAreaUnit = "sqmeters",
+             activeColor = "#3D535D",
+             completedColor = "#7D4479")%>% 
+  addSearchGoogle() %>% 
+  addControlGPS() %>% 
+  addResetMapButton()
+```
+
+# Visor Informativo {data-icon="ion-stats-bars"}
+
+Column {data-width=150}
+-------------------------------------
+### Mapa de dispersin de especies 
+```{r}
+Map
+
+```
